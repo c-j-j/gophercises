@@ -6,40 +6,65 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 )
 
 func main() {
 	problemCsvFilename := flag.String("problems", "problems.csv", "Problem CSV File")
+	timeLimit := flag.Int("time-limit", 5, "Number of seconds before quiz ends")
 	flag.Parse()
 
-	file, err := os.Open(*problemCsvFilename)
+	problems := readProblemsFromFile(*problemCsvFilename)
 
-	if err != nil {
-		exit(*problemCsvFilename)
+	correctAnswers := playQuiz(problems, *timeLimit)
+	printResults(correctAnswers, problems)
+}
+
+func playQuiz(problems []Problem, timeLimit int) int {
+	timer := time.NewTimer(time.Duration(timeLimit) * time.Second)
+	answerChannel := make(chan string)
+
+	correctAnswers := 0
+	for i, problem := range problems {
+		fmt.Printf("%d. What is %s?\n", i+1, problem.question)
+		go readAnswerFromUserfuncName(answerChannel)
+
+		select {
+		case <-timer.C:
+			fmt.Println("Time's up")
+			return correctAnswers
+		case answer := <-answerChannel:
+			if problem.answer == answer {
+				fmt.Printf("Correct\n")
+				correctAnswers++
+			} else {
+				fmt.Printf("Wrong, correct answer is %s\n", problem.answer)
+			}
+		}
 	}
+	return correctAnswers
+}
 
+func readProblemsFromFile(problemCsvFilename string) []Problem {
+	file, err := os.Open(problemCsvFilename)
+	if err != nil {
+		exit(problemCsvFilename)
+	}
 	lines, err := csv.NewReader(file).ReadAll()
-
 	if err != nil {
 		exit("Unable to read CSV file")
 	}
-
 	problems := mapLinesToProblems(lines)
+	return problems
+}
 
-	correctAnswers := 0
+func readAnswerFromUserfuncName(answerChannel chan string) {
+	var answer string
+	fmt.Scanf("%s", &answer)
+	answerChannel <- answer
+}
 
-	for i, problem := range problems {
-		fmt.Printf("%d. What is %s?\n", i+1, problem.question)
-		var answer string
-		fmt.Scanf("%s", &answer)
-
-		if problem.answer == answer {
-			fmt.Printf("Correct\n")
-			correctAnswers++
-		} else {
-			fmt.Printf("Wrong, correct answer is %s\n", problem.answer)
-		}
-	}
+func printResults(correctAnswers int, problems []Problem) {
 	fmt.Printf("Number of correct answers: %d out of %d", correctAnswers, len(problems))
 }
 
